@@ -2,20 +2,61 @@ module Bababu.Parse where
 
 import           Bababu.Types
 import           Control.Monad.Free
-import           Data.ByteString
-import           Xeno.DOM
+import           Control.Monad.State
+import           Data.ByteString.Lazy           ( ByteString )
+import qualified Data.ByteString.Lazy          as LBS
+import qualified Data.ByteString.Lazy.Char8    as L8
+import           Data.Maybe
+import           Text.HTML.TagSoup
 
-template :: ByteString -> Either String (Statements ())
-template xml = case parse xml of
-  Left  e -> Left $ show e
-  Right n -> Right $ statements n
+data Node str
+  = Text str
+  | Element str [(str, str)] [Node str]
+  deriving Show
 
-statements :: Node -> Statements ()
-statements node =
-  liftF $ ExpressionF "ABC" ()
+type ParsingState = [Tag ByteString]
 
-  
-  
+template :: LBS.ByteString -> Either String (Statements ())
+template xml =
+  let tags   = parseTags xml
+      (n, _) = runState convertChildren tags
+  in  Left (show n)
 
+convert :: Maybe (Node ByteString) -> State ParsingState (Node ByteString)
+convert node = do
+  tags <- get
+  when (length tags < 1) (fail "No tags to consume.")
+  put $ tail tags
+  case head tags of
+    (TagOpen t as) -> do
+      ns <- convertChildren
+      convert . Just $ Element t as ns
+    (TagClose t) -> case node of
+      Just n@(Element t' _ _) -> if t' /= t
+        then
+          fail
+          $  "Closing tag:"
+          ++ L8.unpack t'
+          ++ " by tag:"
+          ++ L8.unpack t
+          ++ "."
+        else return n
+      _ -> fail $ "Unexpected closing tag: " ++ L8.unpack t ++ "."
+
+convertChildren :: State ParsingState [Node ByteString]
+convertChildren = do
+  tags <- get
+  if length tags < 1
+    then return []
+    else case head tags of
+      (TagOpen _ _) -> do
+        n  <- convert Nothing
+        ns <- convertChildren
+        return $ n : ns
+      (TagClose _  ) -> return []
+      (TagText  txt) -> do
+        put $ tail tags
+        ns <- convertChildren
+        return $ Text txt : ns
 
 

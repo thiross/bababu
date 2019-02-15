@@ -1,7 +1,7 @@
 module Main where
 
 import           Bababu.Parse
-import qualified Data.ByteString               as B
+import qualified Data.ByteString.Lazy          as BS
 import           System.Environment
 import           System.IO
 
@@ -14,7 +14,7 @@ main = do
   if length args < 1
     then usage
     else do
-      contents <- B.readFile $ head args
+      contents <- BS.readFile $ head args
       case template contents of
         Left  msg -> hPutStrLn stderr msg
         Right _   -> usage
