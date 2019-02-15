@@ -7,16 +7,15 @@ import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.ByteString.Lazy          as LBS
 import qualified Data.ByteString.Lazy.Char8    as LC8
 
-render :: [Node ByteString] -> ByteString
-render nodes = LBS.concat (map renderNode nodes)
-
-renderNode :: Node ByteString -> ByteString
+-- render :: [Node ByteString] -> ByteString
+-- render nodes = LBS.concat (map renderNode nodes)
 
 data ReadState
-  = Open Int
-  | Close Int
-  | In
+  = In
   | Out
+  | InOpen Int
+  | Open Int
+  | Close Int
 
 data StmtState = RenderState
   { readPos   :: Int
@@ -32,7 +31,7 @@ stmt src = do
   if pos >= length src
     then finishStmt
     else do
-      let c = src `elem` pos
+      let c = src !! pos
       put $ s { readPos = pos + 1 }
       case c of
         '{' -> consumeOpenBrace src
@@ -70,8 +69,11 @@ consumeOpenBrace src = do
       put $ s { readState = Open 2 }
       finishStmt
       stmt src
-    Open _ -> fail "Nested '{{}}' is not supported now."
-    Close 
+    Open   _ -> fail "Nested '{{}}' is not supported now."
+    InOpen _ -> fail "Nested '{{}}' is not supported now."
+    In       -> do
+      put $ s { readState = InOpen 1 }
+      stmt src
 
 consumeCloseBrace :: String -> State StmtState [String]
 consumeCloseBrace src = do
@@ -79,11 +81,6 @@ consumeCloseBrace src = do
   case readState s of
     In -> do
       put $ s { readState = Close 1 }
-      stmt src
-    Close 1 -> do
-      put $ s { readState = Out
-              , getStmts  = getStmts s + ["(" ++ getTop s ++ ")"]
-              }
       stmt src
     Close _ -> fail "Nested '{{}}' is not supported now."
 
