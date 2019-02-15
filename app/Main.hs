@@ -1,7 +1,8 @@
 module Main where
 
 import           Bababu.Parse
-import qualified Data.ByteString.Lazy          as BS
+import           Bababu.Render
+import qualified Data.ByteString.Lazy          as LBS
 import           System.Environment
 import           System.IO
 
@@ -14,8 +15,7 @@ main = do
   if length args < 1
     then usage
     else do
-      contents <- BS.readFile $ head args
-      case template contents of
+      contents <- LBS.readFile $ head args
+      case parse contents of
         Left  msg -> hPutStrLn stderr msg
-        Right _   -> usage
-
+        Right n   -> LBS.hPut stdout (render n)

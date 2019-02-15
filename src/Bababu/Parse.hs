@@ -16,11 +16,11 @@ data Node str
 
 type ParsingState = [Tag ByteString]
 
-template :: LBS.ByteString -> Either String (Statements ())
-template xml =
+parse :: ByteString -> Either String [Node ByteString]
+parse xml =
   let tags   = parseTags xml
       (n, _) = runState convertChildren tags
-  in  Left (show n)
+  in  Right n
 
 convert :: Maybe (Node ByteString) -> State ParsingState (Node ByteString)
 convert node = do
