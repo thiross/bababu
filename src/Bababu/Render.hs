@@ -6,18 +6,29 @@ import           Control.Monad.State
 import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.ByteString.Lazy          as LBS
 import qualified Data.ByteString.Lazy.Char8    as LBS8
+import           Data.List                      ( intercalate )
 
 render :: [Node ByteString] -> ByteString
-render nodes = LBS.concat (map renderNode nodes)
+render (n@Element{} : _ ) = renderNode n
+render (_           : ns) = render ns
+render []                 = ""
 
 renderNode :: Node ByteString -> ByteString
-renderNode (Text txt) = LBS8.pack . concat $ expr
+renderNode (Text txt) = LBS8.pack . intercalate "+" $ expr
+  where (expr, _) = runState (stmt $ LBS8.unpack txt) initState
+renderNode (Element tag attrs cs) = LBS.concat
+  [ "_h(\""
+  , tag
+  , "\",{"
+  , LBS.intercalate "," (map r attrs)
+  , "},["
+  , LBS.intercalate "," $ map renderNode cs
+  , "])"
+  ]
  where
-  (expr, _) = runState
-    (stmt $ LBS8.unpack txt)
-    (StmtState {readPos = 0, readState = Out, getStmts = [], getTop = ""})
-renderNode (Element tag attrs cs) =
-  LBS.concat $ ["_h(", tag] ++ map renderNode cs ++ [")"]
+  r (k, v) =
+    let (expr, _) = runState (stmt $ LBS8.unpack v) initState
+    in  LBS.concat ["\"", k, "\":", LBS8.pack $ intercalate "+" expr]
 
 data ReadState
   = In
@@ -33,6 +44,9 @@ data StmtState = StmtState
   , getStmts  :: [String]
   , getTop    :: String
   } deriving Show
+
+initState =
+  StmtState {readPos = 0, readState = Out, getStmts = [], getTop = ""}
 
 stmt :: String -> State StmtState [String]
 stmt src = do
@@ -50,10 +64,17 @@ stmt src = do
           consumeChar src c
           stmt src
 
-finishStmtBy :: String -> String -> String -> State StmtState [String]
-finishStmtBy prefix postfix extra = do
+data FinishType
+  = Expr
+  | Literal
+
+finishStmtBy :: FinishType -> String -> State StmtState [String]
+finishStmtBy t extra = do
   s <- get
-  let top = getTop s
+  let top               = getTop s
+      (prefix, postfix) = case t of
+        Literal -> if '"' `elem` top then ("'", "'") else ("\"", "\"")
+        Expr    -> ("(", ")")
   if null top && null extra
     then do
       put $ s { readState = Out }
@@ -67,9 +88,9 @@ finishStmt :: State StmtState [String]
 finishStmt = do
   s <- get
   case readState s of
-    Close 2 -> finishStmtBy "(" ")" ""
-    Out     -> finishStmtBy "\"" "\"" ""
-    Open 1  -> finishStmtBy "\"" "\"" "{"
+    Close 2 -> finishStmtBy Expr ""
+    Out     -> finishStmtBy Literal ""
+    Open 1  -> finishStmtBy Literal "{"
     Open _  -> fail "Expected '}}' not found."
     In      -> fail "Expected '}}' not found."
 
@@ -107,8 +128,12 @@ consumeChar :: String -> Char -> State StmtState ()
 consumeChar src next = do
   s <- get
   let top = getTop s
-      rs  = case readState s of
+      n   = case next of
+        '\r' -> "\\r"
+        '\n' -> "\\n"
+        _    -> [next]
+      rs = case readState s of
         Open 2 -> In
         In     -> In
         _      -> Out
-  put $ s { getTop = top ++ [next], readState = rs }
+  put $ s { getTop = top ++ n, readState = rs }
