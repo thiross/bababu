@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Bababu.Parse where
 
 import           Bababu.Types
@@ -61,8 +62,33 @@ convertChildren = do
         ns <- convertChildren
         return $ Text txt : ns
 
-parseProgram :: IsString str => [Node str] -> Program str r
-parseProgram []       = liftF Done
-parseProgram (n : ns) = case n of
-  Element t as cs -> Free $ Block t as (parseProgram cs) (parseProgram ns)
-  Text txt        -> Free $ Expression txt (parseProgram ns)
+parseProgram :: (IsString str, Eq str) => [Node str] -> Program str r
+parseProgram []           = liftF Done
+parseProgram all@(n : ns) = case n of
+  Element t as cs -> if containsKey "wx:if" as
+    then Free $ Block t as (parseProgram cs) (parseProgram ns)
+    else Free $ Block t as (parseProgram cs) (parseProgram ns)
+  Text txt -> Free $ Expression txt (parseProgram ns)
+
+containsKey :: (IsString str, Eq str) => str -> [(str, str)] -> Bool
+containsKey key = foldr (\a -> (||) (fst a == key)) False
+
+
+type IfState = (Int, Int)
+
+parseIfBlocks :: (IsString str, Eq str) => [Node str] -> State IfState Int
+parseIfBlocks (n : ns) = do
+  (idx, lvl) <- get
+  case n of
+    Element _ as _ | containsKey "wx:if" as -> do
+      put (idx + 1, lvl + 1)
+      parseIfBlocks ns
+    Element _ as _ | containsKey "wx:else" as -> if lvl == 0
+      then return idx
+      else do
+        put (idx + 1, lvl - 1)
+        parseIfBlocks ns
+    _ -> do
+      put (idx + 1, lvl)
+      parseIfBlocks ns
+
