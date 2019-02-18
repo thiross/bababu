@@ -1,34 +1,34 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Bababu.Render where
 
-import           Bababu.Parse
+import           Bababu.Types
+import           Control.Monad.Free
 import           Control.Monad.State
 import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.ByteString.Lazy          as LBS
 import qualified Data.ByteString.Lazy.Char8    as LBS8
 import           Data.List                      ( intercalate )
 
-render :: [Node ByteString] -> ByteString
-render (n@Element{} : _ ) = renderNode n
-render (_           : ns) = render ns
-render []                 = ""
-
-renderNode :: Node ByteString -> ByteString
-renderNode (Text txt) = LBS8.pack . intercalate "+" $ expr
-  where (expr, _) = runState (stmt $ LBS8.unpack txt) initState
-renderNode (Element tag attrs cs) = LBS.concat
-  [ "_h(\""
-  , tag
-  , "\",{"
-  , LBS.intercalate "," (map r attrs)
-  , "},["
-  , LBS.intercalate "," $ map renderNode cs
-  , "])"
-  ]
+render :: Program ByteString r -> ByteString
+render (Free Done                 ) = ""
+render (Free (Expression txt next)) = if LBS.length o == 0
+  then e
+  else LBS.concat [e, ",", o]
  where
-  r (k, v) =
-    let (expr, _) = runState (stmt $ LBS8.unpack v) initState
-    in  LBS.concat ["\"", k, "\":", LBS8.pack $ intercalate "+" expr]
+  e = expr txt
+  o = render next
+render (Free (Block t as cn next)) = LBS.concat
+  [ "_h(\""
+  , t
+  , "\",{"
+  , LBS.intercalate ","
+    $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
+  , "},["
+  , render cn
+  , "]);\n"
+  , render next
+  ]
+  where pair (k, v) = LBS.concat ["\"", k, "\":", expr v]
 
 data ReadState
   = In
@@ -44,6 +44,11 @@ data StmtState = StmtState
   , getStmts  :: [String]
   , getTop    :: String
   } deriving Show
+
+expr :: ByteString -> ByteString
+expr e =
+  let (es, _) = runState (stmt $ LBS8.unpack e) initState
+  in  LBS8.pack $ intercalate "+" es
 
 initState =
   StmtState {readPos = 0, readState = Out, getStmts = [], getTop = ""}
