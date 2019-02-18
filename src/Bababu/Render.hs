@@ -5,10 +5,19 @@ import           Bababu.Parse
 import           Control.Monad.State
 import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.ByteString.Lazy          as LBS
-import qualified Data.ByteString.Lazy.Char8    as LC8
+import qualified Data.ByteString.Lazy.Char8    as LBS8
 
--- render :: [Node ByteString] -> ByteString
--- render nodes = LBS.concat (map renderNode nodes)
+render :: [Node ByteString] -> ByteString
+render nodes = LBS.concat (map renderNode nodes)
+
+renderNode :: Node ByteString -> ByteString
+renderNode (Text txt) = LBS8.pack . concat $ expr
+ where
+  (expr, _) = runState
+    (stmt $ LBS8.unpack txt)
+    (StmtState {readPos = 0, readState = Out, getStmts = [], getTop = ""})
+renderNode (Element tag attrs cs) =
+  LBS.concat $ ["_h(", tag] ++ map renderNode cs ++ [")"]
 
 data ReadState
   = In
@@ -16,13 +25,14 @@ data ReadState
   | InOpen Int
   | Open Int
   | Close Int
+  deriving Show
 
-data StmtState = RenderState
+data StmtState = StmtState
   { readPos   :: Int
   , readState :: ReadState
   , getStmts  :: [String]
   , getTop    :: String
-  }
+  } deriving Show
 
 stmt :: String -> State StmtState [String]
 stmt src = do
@@ -36,13 +46,15 @@ stmt src = do
       case c of
         '{' -> consumeOpenBrace src
         '}' -> consumeCloseBrace src
-        _   -> consumeChar src c
+        _   -> do
+          consumeChar src c
+          stmt src
 
 finishStmtBy :: String -> String -> String -> State StmtState [String]
 finishStmtBy prefix postfix extra = do
   s <- get
   let top = getTop s
-  if length top == 0 && length extra == 0
+  if null top && null extra
     then do
       put $ s { readState = Out }
       return . getStmts $ s
@@ -66,12 +78,15 @@ consumeOpenBrace src = do
   s <- get
   case readState s of
     Open 1 -> do
-      put $ s { readState = Open 2 }
       finishStmt
+      put $ s { readState = Open 2 }
       stmt src
-    Open   _ -> fail "Nested '{{}}' is not supported now."
-    InOpen _ -> fail "Nested '{{}}' is not supported now."
-    In       -> do
+    Open   _ -> fail "Nest '{{}}' is not supported now."
+    InOpen _ -> fail "Nest '{{}}' is not supported now."
+    Out      -> do
+      put $ s { readState = Open 1 }
+      stmt src
+    In -> do
       put $ s { readState = InOpen 1 }
       stmt src
 
@@ -82,5 +97,18 @@ consumeCloseBrace src = do
     In -> do
       put $ s { readState = Close 1 }
       stmt src
-    Close _ -> fail "Nested '{{}}' is not supported now."
+    Close 1 -> do
+      put $ s { readState = Close 2 }
+      finishStmt
+      stmt src
+    Close _ -> fail "Nest '{{}}' is not supported now."
 
+consumeChar :: String -> Char -> State StmtState ()
+consumeChar src next = do
+  s <- get
+  let top = getTop s
+      rs  = case readState s of
+        Open 2 -> In
+        In     -> In
+        _      -> Out
+  put $ s { getTop = top ++ [next], readState = rs }

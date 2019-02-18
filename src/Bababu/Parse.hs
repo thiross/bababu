@@ -5,7 +5,7 @@ import           Control.Monad.Free
 import           Control.Monad.State
 import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.ByteString.Lazy          as LBS
-import qualified Data.ByteString.Lazy.Char8    as L8
+import qualified Data.ByteString.Lazy.Char8    as LBS8
 import           Data.Maybe
 import           Text.HTML.TagSoup
 
@@ -36,12 +36,12 @@ convert node = do
         then
           fail
           $  "Closing tag:"
-          ++ L8.unpack t'
+          ++ LBS8.unpack t'
           ++ " by tag:"
-          ++ L8.unpack t
+          ++ LBS8.unpack t
           ++ "."
         else return n
-      _ -> fail $ "Unexpected closing tag: " ++ L8.unpack t ++ "."
+      _ -> fail $ "Unexpected closing tag: " ++ LBS8.unpack t ++ "."
 
 convertChildren :: State ParsingState [Node ByteString]
 convertChildren = do
