@@ -72,6 +72,7 @@ stmt src = do
 data FinishType
   = Expr
   | Literal
+  deriving Show
 
 finishStmtBy :: FinishType -> String -> State StmtState [String]
 finishStmtBy t extra = do
@@ -104,8 +105,9 @@ consumeOpenBrace src = do
   s <- get
   case readState s of
     Open 1 -> do
+      put $ s { readState = Out }
       finishStmt
-      put $ s { readState = Open 2 }
+      modify $ \s -> s { readState = Open 2 }
       stmt src
     Open   _ -> fail "Nest '{{}}' is not supported now."
     InOpen _ -> fail "Nest '{{}}' is not supported now."
