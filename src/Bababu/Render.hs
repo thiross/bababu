@@ -25,10 +25,11 @@ render (Free (Block t as cn next)) = LBS.concat
     $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
   , "},["
   , render cn
-  , "]);\n"
+  , "])\n"
   , render next
   ]
   where pair (k, v) = LBS.concat ["\"", k, "\":", expr v]
+render (Free (IfBlock t as ifs els next)) = "if"
 
 data ReadState
   = In

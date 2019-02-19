@@ -9,6 +9,7 @@ import qualified Data.ByteString.Lazy          as LBS
 import qualified Data.ByteString.Lazy.Char8    as LBS8
 import           Data.Maybe
 import           Data.String
+import           Debug.Trace
 import           Text.HTML.TagSoup
 
 type ParsingState = [Tag ByteString]
@@ -62,33 +63,25 @@ convertChildren = do
         ns <- convertChildren
         return $ Text txt : ns
 
-parseProgram :: (IsString str, Eq str) => [Node str] -> Program str r
+parseProgram :: (Eq str, Show str, IsString str) => [Node str] -> Program str r
 parseProgram []           = liftF Done
 parseProgram all@(n : ns) = case n of
-  Element t as cs -> if containsKey "wx:if" as
-    then Free $ Block t as (parseProgram cs) (parseProgram ns)
-    else Free $ Block t as (parseProgram cs) (parseProgram ns)
-  Text txt -> Free $ Expression txt (parseProgram ns)
+  Element t as cs | containsKey "wx:if" as -> case findElseNode ns of
+    (Nothing, _) ->
+      Free $ IfBlock t as (parseProgram cs) (liftF Done) (parseProgram ns)
+    (Just e, others) -> Free
+      $ IfBlock t as (parseProgram cs) (parseProgram e) (parseProgram others)
+  Element _ as _ | containsKey "wx:else" as ->
+    fail $ "Dangling else clause found: " ++ show n
+  Element t as cs -> Free $ Block t as (parseProgram cs) (parseProgram ns)
+  Text txt        -> Free $ Expression txt (parseProgram ns)
 
 containsKey :: (IsString str, Eq str) => str -> [(str, str)] -> Bool
 containsKey key = foldr (\a -> (||) (fst a == key)) False
 
-
-type IfState = (Int, Int)
-
-parseIfBlocks :: (IsString str, Eq str) => [Node str] -> State IfState Int
-parseIfBlocks (n : ns) = do
-  (idx, lvl) <- get
-  case n of
-    Element _ as _ | containsKey "wx:if" as -> do
-      put (idx + 1, lvl + 1)
-      parseIfBlocks ns
-    Element _ as _ | containsKey "wx:else" as -> if lvl == 0
-      then return idx
-      else do
-        put (idx + 1, lvl - 1)
-        parseIfBlocks ns
-    _ -> do
-      put (idx + 1, lvl)
-      parseIfBlocks ns
-
+findElseNode
+  :: (Eq str, IsString str) => [Node str] -> (Maybe [Node str], [Node str])
+findElseNode [] = (Nothing, [])
+findElseNode all@(e@(Element _ as _) : ns) =
+  if containsKey "wx:else" as then (Just [e], ns) else (Nothing, all)
+findElseNode (Text{} : ns) = findElseNode ns
