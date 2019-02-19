@@ -37,7 +37,7 @@ render' (Free (IfBlock t as ife ele next)) =
       , cond as
       , ")?["
       , LBS.intercalate "," $ render' ife
-      , ":"
+      , "]:["
       , LBS.intercalate "," $ render' ele
       , "])"
       ]
