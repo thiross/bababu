@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Bababu.Render where
+module Bababu.Render
+  ( render
+  )
+where
 
 import           Bababu.Types
 import           Control.Monad.Free
@@ -10,26 +13,40 @@ import qualified Data.ByteString.Lazy.Char8    as LBS8
 import           Data.List                      ( intercalate )
 
 render :: Program ByteString r -> ByteString
-render (Free Done                 ) = ""
-render (Free (Expression txt next)) = if LBS.length o == 0
-  then e
-  else LBS.concat [e, ",", o]
- where
-  e = expr txt
-  o = render next
-render (Free (Block t as cn next)) = LBS.concat
-  [ "_h(\""
-  , t
-  , "\",{"
-  , LBS.intercalate ","
-    $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
-  , "},["
-  , render cn
-  , "])\n"
-  , render next
-  ]
+render = LBS.concat . render'
+
+render' :: Program ByteString r -> [ByteString]
+render' (Free Done                 ) = []
+render' (Free (Expression txt next)) = expr txt : render' next
+render' (Free (Block t as cn next)) =
+  LBS.concat
+      [ "_h(\""
+      , t
+      , "\",{"
+      , LBS.intercalate ","
+        $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
+      , "},["
+      , LBS.intercalate "," $ render' cn
+      , "].flat())"
+      ]
+    : render' next
   where pair (k, v) = LBS.concat ["\"", k, "\":", expr v]
-render (Free (IfBlock t as ifs els next)) = "if"
+render' (Free (IfBlock t as ife ele next)) =
+  LBS.concat
+      [ "(("
+      , cond as
+      , ")?["
+      , LBS.intercalate "," $ render' ife
+      , ":"
+      , LBS.intercalate "," $ render' ele
+      , "])"
+      ]
+    : render' next
+ where
+  cond (("wx:if", e) : _ ) = expr e
+  cond (_            : as) = cond as
+
+
 
 data ReadState
   = In

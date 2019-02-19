@@ -81,7 +81,8 @@ containsKey key = foldr (\a -> (||) (fst a == key)) False
 
 findElseNode
   :: (Eq str, IsString str) => [Node str] -> (Maybe [Node str], [Node str])
-findElseNode [] = (Nothing, [])
-findElseNode all@(e@(Element _ as _) : ns) =
-  if containsKey "wx:else" as then (Just [e], ns) else (Nothing, all)
+findElseNode []                         = (Nothing, [])
+findElseNode all@(Element t as cs : ns) = if containsKey "wx:else" as
+  then (Just [Element t (filter ((/= "wx:else") . fst) as) cs], ns)
+  else (Nothing, all)
 findElseNode (Text{} : ns) = findElseNode ns
