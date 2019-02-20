@@ -12,8 +12,17 @@ import qualified Data.ByteString.Lazy          as LBS
 import qualified Data.ByteString.Lazy.Char8    as LBS8
 import           Data.List                      ( intercalate )
 
-render :: Program ByteString r -> ByteString
-render = LBS.concat . render'
+render :: ByteString -> Program ByteString r -> ByteString
+render n p =
+  LBS.concat
+    $  [ "__mini_app_set_current_page(\""
+       , n
+       , "\");__mini_app_install_renderer(\""
+       , n
+       , "\",\"\",function(){with(this){return "
+       ]
+    ++ render' p
+    ++ ["}});"]
 
 render' :: Program ByteString r -> [ByteString]
 render' (Free Done                 ) = []
@@ -21,16 +30,22 @@ render' (Free (Expression txt next)) = expr txt : render' next
 render' (Free (Block t as cn next)) =
   LBS.concat
       [ "_h(\""
-      , t
-      , "\",{"
+      , htmlTag t
+      , "\",{class:{"
+      , classes as
+      , "},props:{"
       , LBS.intercalate ","
         $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
-      , "},["
+      , "}},["
       , LBS.intercalate "," $ render' cn
       , "].flat())"
       ]
     : render' next
-  where pair (k, v) = LBS.concat ["\"", k, "\":", expr v]
+ where
+  pair (k, v) = LBS.concat ["\"", k, "\":", expr v]
+  classes []                  = ""
+  classes (("class", v) : _ ) = LBS.concat ["\"", v, "\":true"]
+  classes (_            : as) = classes as
 render' (Free (IfBlock t as ife ele next)) =
   LBS.concat
       [ "(("
@@ -46,8 +61,6 @@ render' (Free (IfBlock t as ife ele next)) =
   cond (("wx:if", e) : _ ) = expr e
   cond (_            : as) = cond as
 
-
-
 data ReadState
   = In
   | Out
@@ -62,6 +75,14 @@ data StmtState = StmtState
   , getStmts  :: [String]
   , getTop    :: String
   } deriving Show
+
+htmlTag :: ByteString -> ByteString
+htmlTag t = case t of
+  "view"  -> "div"
+  "block" -> "div"
+  "text"  -> "span"
+  "image" -> "img"
+  _       -> t
 
 expr :: ByteString -> ByteString
 expr e =

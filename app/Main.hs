@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import           Bababu.Parse
@@ -18,4 +19,4 @@ main = do
       contents <- LBS.readFile $ head args
       case parse contents of
         Left  msg -> hPutStrLn stderr msg
-        Right n   -> LBS.hPut stdout (render n)
+        Right n   -> LBS.hPut stdout (render "pages/index" n)
