@@ -13,7 +13,7 @@ data StatementF str r
   = Done
   | Expression str r
   | Block str [(str, str)] (Program str r) r
-  | IfBlock str [(str, str)] (Program str r) (Program str r) r
+  | IfBlock (StatementF str r) (Program str r) r
   deriving Functor
 
 type Program str = Free (StatementF str)

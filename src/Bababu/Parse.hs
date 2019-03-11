@@ -67,10 +67,14 @@ parseProgram :: (Eq str, Show str, IsString str) => [Node str] -> Program str r
 parseProgram []           = liftF Done
 parseProgram all@(n : ns) = case n of
   Element t as cs | containsKey "wx:if" as -> case findElseNode ns of
-    (Nothing, _) ->
-      Free $ IfBlock t as (parseProgram cs) (liftF Done) (parseProgram ns)
-    (Just e, others) -> Free
-      $ IfBlock t as (parseProgram cs) (parseProgram e) (parseProgram others)
+    (Nothing, _) -> Free $ IfBlock
+      (Block t as (parseProgram cs) (liftF Done))
+      (liftF Done)
+      (parseProgram ns)
+    (Just e, others) -> Free $ IfBlock
+      (Block t as (parseProgram cs) (liftF Done))
+      (parseProgram e)
+      (parseProgram others)
   Element _ as _ | containsKey "wx:else" as ->
     fail $ "Dangling else clause found: " ++ show n
   Element t as cs -> Free $ Block t as (parseProgram cs) (parseProgram ns)

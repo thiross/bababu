@@ -28,51 +28,37 @@ render n p =
 render' :: Program ByteString r -> [ByteString]
 render' (Free Done                 ) = []
 render' (Free (Expression txt next)) = expr txt : render' next
-render' (Free (Block t as cn next)) =
+render' (Free (Block t as cn next )) = renderBlock t as cn : render' next
+render' (Free (IfBlock ife@(Block t as cn _) ele next)) =
   LBS.concat
-      [ "_h(\""
-      , htmlTag t
-      , "\",{class:{"
-      , classes as
-      , "},props:{"
-      , LBS.intercalate ","
-        $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
-      , "},on:{"
-      , LBS.intercalate "," (renderHandler as)
-      , "}},["
-      , LBS.intercalate "," $ render' cn
-      , "])"
-      ]
-    : render' next
- where
-  pair (k, v) = LBS.concat ["\"", k, "\":", expr v]
-  classes []                  = ""
-  classes (("class", v) : _ ) = LBS.concat ["\"", v, "\":true"]
-  classes (_            : as) = classes as
-render' (Free (IfBlock t as ife ele next)) =
-  LBS.concat
-      [ "_h(\""
-      , htmlTag t
-      , "\",{class:{"
-      , classes as
-      , "},props:{"
-      , LBS.intercalate ","
-        $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
-      , "},on:{"
-      , LBS.intercalate "," (renderHandler as)
-      , "}},"
-      , "("
+      [ "("
       , cond as
-      , ")?["
-      , LBS.intercalate "," $ render' ife
-      , "]:["
+      , ")?"
+      , renderBlock t as cn
+      , ":"
       , LBS.intercalate "," $ render' ele
-      , "])"
+      , ""
       ]
     : render' next
  where
   cond (("wx:if", e) : _ ) = expr e
   cond (_            : as) = cond as
+
+renderBlock t as cn = LBS.concat
+  [ "_h(\""
+  , htmlTag t
+  , "\",{class:{"
+  , classes as
+  , "},props:{"
+  , LBS.intercalate ","
+    $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
+  , "},on:{"
+  , LBS.intercalate "," (renderHandler as)
+  , "}},["
+  , LBS.intercalate "," $ render' cn
+  , "])"
+  ]
+ where
   pair (k, v) = LBS.concat ["\"", k, "\":", expr v]
   classes []                  = ""
   classes (("class", v) : _ ) = LBS.concat ["\"", v, "\":true"]
