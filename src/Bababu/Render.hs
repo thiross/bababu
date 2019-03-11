@@ -11,11 +11,12 @@ import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.ByteString.Lazy          as LBS
 import qualified Data.ByteString.Lazy.Char8    as LBS8
 import           Data.List                      ( intercalate )
+import           Debug.Trace
 
 render :: ByteString -> Program ByteString r -> ByteString
 render n p =
   LBS.concat
-    $  [ "__mini_app_set_current_page(\""
+    $  [ "__mini_app_set_current_page_name(\""
        , n
        , "\");__mini_app_install_renderer(\""
        , n
@@ -36,9 +37,11 @@ render' (Free (Block t as cn next)) =
       , "},props:{"
       , LBS.intercalate ","
         $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
+      , "},on:{"
+      , LBS.intercalate "," (renderHandler as)
       , "}},["
       , LBS.intercalate "," $ render' cn
-      , "].flat())"
+      , "])"
       ]
     : render' next
  where
@@ -48,7 +51,17 @@ render' (Free (Block t as cn next)) =
   classes (_            : as) = classes as
 render' (Free (IfBlock t as ife ele next)) =
   LBS.concat
-      [ "(("
+      [ "_h(\""
+      , htmlTag t
+      , "\",{class:{"
+      , classes as
+      , "},props:{"
+      , LBS.intercalate ","
+        $ map pair (filter (not . LBS.isPrefixOf "wx:" . fst) as)
+      , "},on:{"
+      , LBS.intercalate "," (renderHandler as)
+      , "}},"
+      , "("
       , cond as
       , ")?["
       , LBS.intercalate "," $ render' ife
@@ -60,6 +73,16 @@ render' (Free (IfBlock t as ife ele next)) =
  where
   cond (("wx:if", e) : _ ) = expr e
   cond (_            : as) = cond as
+  pair (k, v) = LBS.concat ["\"", k, "\":", expr v]
+  classes []                  = ""
+  classes (("class", v) : _ ) = LBS.concat ["\"", v, "\":true"]
+  classes (_            : as) = classes as
+
+renderHandler :: [(ByteString, ByteString)] -> [ByteString]
+renderHandler [] = []
+renderHandler (("bindtap", h) : as) =
+  LBS.concat ["click:", h] : renderHandler as
+renderHandler (a : as) = renderHandler as
 
 data ReadState
   = In
